@@ -5,6 +5,7 @@
         <script src="js/jquery.js"></script>
         <script src='js/threex.domevent.js'></script>
         <script src="js/three.js"></script>
+        <script src="js/regression.js"></script>
         <script src="js/Detector.js"></script>
     </head>
     <body>
@@ -17,6 +18,8 @@
             var isRotating=false;
             var buffer = []; //Guarda las lineas que se dibujan y luego es vaciado
             var puntos = []; //Guarda los puntos dibujados en cada trazo
+            var stickFigure =  {};
+
             function get3dPointZAxis(event)
             {
                 var vector = new THREE.Vector3(
@@ -60,12 +63,9 @@
 				
 				document.addEventListener( 'mousedown', startDraw, false );
                 document.addEventListener( 'mouseup', stopDraw, false );
-                document.addEventListener( 'mousemove', doDraw, false );
+                document.addEventListener( 'mousemove', doDraw, false );				
 
-				//
-
-				window.addEventListener( 'resize', onWindowResize, false );
-
+                window.addEventListener( 'resize', onWindowResize, false );
 			}
 
 			function startDraw(event)
@@ -82,6 +82,10 @@
                 	scene.remove(buffer[i]);
                 }
                 buffer=[];
+                var shape = recognizeStroke(puntos);
+                if (shape) {
+                    scene.add(shape);
+                }
             }
 
             function doDraw(event)
@@ -135,6 +139,94 @@
 			function render() {
 				renderer.render( scene, camera );
 			}
+
+            function recognizeStroke(points) {
+
+                var touchMoveX = [];
+                var touchMoveY = [];
+
+                points.forEach(function (point) {
+                    touchMoveX.push(point.x);
+                    touchMoveY.push(point.y);
+                });
+
+                var totalAmount = points.length;
+
+
+
+                // sum up all coordinates and divide them by total length 
+                // the average is a cheap approximation of the center.
+                var averageX = touchMoveX.reduce( function ( previous, current) {
+                    return previous + current;
+                } ) / totalAmount ;
+                var averageY = touchMoveY.reduce( function ( previous, current) {
+                    return previous + current;
+                } ) / totalAmount ;
+
+                // compute distance to approximated center from each point
+                var distances = touchMoveX.map ( function ( x, index ) {
+                    var y = touchMoveY[index];        
+                    return Math.sqrt( Math.pow(x - averageX, 2) + Math.pow(y - averageY, 2) );
+                } );
+                // average of those distance is 
+                var averageDistance = distances.reduce ( function ( previous, current ) {
+                    return previous + current;
+                } ) / distances.length;
+
+                var min = averageDistance * 0.75;
+                var max = averageDistance * 1.33;
+                // filter out the ones not inside the min and max boundaries 
+                var inRange = distances.filter ( function ( d ) {
+                   return d > min && d < max;
+                } );
+
+                var minPercentInRange = 70;
+                var percentInRange = inRange.length / totalAmount * 100;
+
+                var data = points.map(function (point) { return [point.x, point.y] });
+                var linear = regression('linear', data);
+                var poli = regression('polynomial', data,2);
+                var exp = regression('exponential', data);
+
+                var regs = [linear,poli,exp];
+                console.log(regs);
+                var sortedR2s = regs.map(function (reg) {
+                    return reg.r2;
+                }).sort();
+                console.log(sortedR2s);
+
+                
+
+                // by the % of points within those boundaries we can guess if it's circle
+                if ( !stickFigure.head && !stickFigure.body && percentInRange > minPercentInRange ) {
+                    console.log('Stroke is a head');
+                    var headDetails = {centroid: {x: averageX, y: averageY}, radius: averageDistance};
+                    stickFigure.head = headDetails;
+                    return drawCircle(headDetails.centroid, headDetails.radius);
+                } else {
+                    console.log(min);
+                    console.log(max);
+                    console.log(distances);
+                    console.log(inRange);
+                    console.log('Stroke is not recognized');
+                    return null;
+                }
+            }
+
+            function drawCircle(centroid, radius) {
+                var radius = radius,
+                segments = 64,
+                material = new THREE.LineBasicMaterial( { color: 0x0000ff } ),
+                geometry = new THREE.CircleGeometry( radius, segments );
+
+                // Remove center vertex
+                geometry.vertices.shift();
+
+                geometry.applyMatrix( new THREE.Matrix4().makeTranslation(centroid.x, centroid.y, 0) );
+                //geometry.translate( centroid.x, centroid.y, 0 );
+
+                return new THREE.Line( geometry, material );
+            }
             
     	</script>
     	<div>
