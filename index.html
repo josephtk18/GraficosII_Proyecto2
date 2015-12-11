@@ -18,7 +18,7 @@
             var isRotating=false;
             var buffer = []; //Guarda las lineas que se dibujan y luego es vaciado
             var puntos = []; //Guarda los puntos dibujados en cada trazo
-            var stickFigure =  {};
+            var stickFigure =  {arm: {}, leg: {}};
 
             function get3dPointZAxis(event)
             {
@@ -77,7 +77,6 @@
             function stopDraw(event)
             {
                 lastPoint = null;
-                console.log(puntos);
                 for (i=0; i<buffer.length; i++){
                 	scene.remove(buffer[i]);
                 }
@@ -142,6 +141,95 @@
 
             function recognizeStroke(points) {
 
+                // by the % of points within those boundaries we can guess if it's circle
+                if (!stickFigure.head && !stickFigure.body) {
+                    var head = recognizeCircle(points);
+                    if (head) {
+                        console.log('Stroke is a head');
+                        stickFigure.head = head;
+                        return drawCircle(head.centroid, head.radius);
+                    }
+                    var body = recognizeLine(points);
+                    if (body) {
+                        console.log('Stroke is a body');
+                        stickFigure.body = body;
+                        return drawLine(0x0000ff, body.points);
+                    }
+                    console.log('Stroke is invalid');
+                } else if (stickFigure.head && !stickFigure.body) {
+                    var body = recognizeLine(points);
+                    if (body) {
+                        if (isHeadAndBodyValid(stickFigure.head, body)) {
+                            console.log('Stroke is a body');
+                            stickFigure.body = body;
+                            return drawLine(0x0000ff, body.points);
+                        }
+                    }
+                    console.log('Stroke is invalid');
+                } else if (stickFigure.body && !stickFigure.head) {
+                    var head = recognizeCircle(points);
+                    if (head) {
+                        if (isHeadAndBodyValid(head, stickFigure.body)) {
+                            console.log('Stroke is a head');
+                            stickFigure.head = head;
+                            return drawCircle(head.centroid, head.radius);
+                        }
+                    }
+                    console.log('Stroke is invalid');
+                } else {
+                    var supposedExtremity = recognizeLine(points);
+                    if (supposedExtremity) {
+                        var extremity = isExtremityValid(stickFigure.head, stickFigure.body, supposedExtremity.points);
+                        if (extremity) {
+                            console.log('Stroke is a ' + extremity.name);
+                            var side = recognizeExtremitySide(extremity.points);
+                            var color;
+                            if (extremity.name === 'arm' && side === 'left' && !stickFigure.arm.left) {
+                                stickFigure.arm.left = extremity;
+                                color = 0x00dd00;
+                            } else if (extremity.name === 'arm' && side === 'right' && !stickFigure.arm.right) {
+                                stickFigure.arm.right = extremity;
+                                color = 0xffcc00;
+                            } else if (extremity.name === 'leg' && side === 'left' && !stickFigure.leg.left) {
+                                stickFigure.leg.left = extremity;
+                                color = 0xf4a460;
+                            } else if (extremity.name === 'leg' && side === 'right' && !stickFigure.leg.right) {
+                                stickFigure.leg.right = extremity;
+                                color = 0xdd00f5;
+                            }
+                            if (color) {
+                                return drawLine(color, extremity.points);
+                            }
+                        }
+                    }
+                    console.log('Stroke is not recognized');
+                }
+            }
+
+            function recognizeExtremitySide(points){
+                var bodyCentroid = stickFigure.body.points[(stickFigure.body.points.length) / 2 | 0];
+                var vectBelly = new THREE.Vector3(bodyCentroid[0], bodyCentroid[1]);
+                var headCentroid = stickFigure.head.centroid;
+                var vectHead = new THREE.Vector3(headCentroid.x, headCentroid.y);
+                var vect = new THREE.Vector3();
+                vect.subVectors(vectBelly,vectHead);
+                var vectPerp = new THREE.Vector3();
+                vectPerp.crossVectors(vect,new THREE.Vector3(0,0,-1));
+                var strokeCentroid = points[points.length / 2 | 0];
+                var vectExtremity = new THREE.Vector3(strokeCentroid[0], strokeCentroid[1]);
+                var vectBodyToExtremity = new THREE.Vector3();
+                vectBodyToExtremity.subVectors(vectBelly,vectExtremity);
+                var angle = (180/Math.PI)*(vectPerp.angleTo(vectBodyToExtremity));
+                console.log(angle);
+                if (angle <= 90 || angle >= 270) {
+                    return 'right';
+                } else {
+                    return 'left';
+                }
+            }
+
+            function recognizeCircle(points) {
+
                 var touchMoveX = [];
                 var touchMoveY = [];
 
@@ -151,8 +239,6 @@
                 });
 
                 var totalAmount = points.length;
-
-
 
                 // sum up all coordinates and divide them by total length 
                 // the average is a cheap approximation of the center.
@@ -182,41 +268,16 @@
 
                 var minPercentInRange = 70;
                 var percentInRange = inRange.length / totalAmount * 100;
-
-                var data = points.map(function (point) { return [point.x, point.y] });
-                var linear = regression('linear', data);
-                var poli = regression('polynomial', data,2);
-                var exp = regression('exponential', data);
-
-                var regs = [linear,poli,exp];
-                console.log(regs);
-                var sortedR2s = regs.map(function (reg) {
-                    return reg.r2;
-                }).sort();
-                console.log(sortedR2s);
-
-                
-
-                // by the % of points within those boundaries we can guess if it's circle
-                if ( !stickFigure.head && !stickFigure.body && percentInRange > minPercentInRange ) {
-                    console.log('Stroke is a head');
-                    var headDetails = {centroid: {x: averageX, y: averageY}, radius: averageDistance};
-                    stickFigure.head = headDetails;
-                    return drawCircle(headDetails.centroid, headDetails.radius);
+                if (percentInRange > minPercentInRange) {
+                    return {centroid: {x: averageX, y: averageY}, radius: averageDistance};
                 } else {
-                    console.log(min);
-                    console.log(max);
-                    console.log(distances);
-                    console.log(inRange);
-                    console.log('Stroke is not recognized');
                     return null;
                 }
             }
-
             function drawCircle(centroid, radius) {
                 var radius = radius,
                 segments = 64,
-                material = new THREE.LineBasicMaterial( { color: 0x0000ff } ),
+                material = new THREE.LineBasicMaterial( { color: 0xff0000 } ),
                 geometry = new THREE.CircleGeometry( radius, segments );
 
                 // Remove center vertex
@@ -227,10 +288,185 @@
 
                 return new THREE.Line( geometry, material );
             }
-            
+            function recognizeLine(points) {
+                var data = points.map(function (point) { return [point.x, point.y] });
+                var linear = regression('linear', data);
+                var poli = regression('polynomial', data, 2);
+                var exp = regression('exponential', data);
+
+                var regs = [linear,poli,exp];
+                var sortedRegs = regs.sort(function (oldValue, newValue) {
+                    return oldValue.r2 < newValue.r2;
+                });
+                var highestR2Reg = sortedRegs[sortedRegs.length - 1];
+                console.log(highestR2Reg);
+                if (highestR2Reg.r2 > 0.5) {
+                    return highestR2Reg;  
+                } else {
+                    return null;
+                }
+            }
+            function drawLine(color, points){
+                if (points.length == 0) {
+                    console.log("No points");
+                    return;
+                }
+                var material = new THREE.LineBasicMaterial({
+                    color: color
+                });
+                var geometry = new THREE.Geometry();
+                
+                for (var i = 0; i < points.length; i++) {
+                    geometry.vertices.push(new THREE.Vector3(points[i][0], points[i][1], 0));
+                }
+                return new THREE.Line(geometry, material);
+            }
+            function isHeadAndBodyValid(head, body) {
+                var radius = head.radius;
+                var headPoint = [head.centroid.x, head.centroid.y];
+                var bellyPoint = body.points[(body.points.length / 2) | 0];
+                var bellyMin = radius * 2.5;
+                var bellyMax = radius * 8;
+                var distanceFromHeadToBelly = distanceBetweenPoints(headPoint, bellyPoint);
+                if (distanceFromHeadToBelly < bellyMin || distanceFromHeadToBelly > bellyMax) {
+                    console.log('Stroke is not body because belly is out of range');
+                    return false;
+                }
+                
+                var startDistanceFromHeadToNeck = distanceBetweenPoints(headPoint, body.points[0]);
+                var endDistanceFromHeadToNeck = distanceBetweenPoints(headPoint, body.points[body.points.length - 1]);
+                var minimumDistanceFromHeadToNeck = Math.min(startDistanceFromHeadToNeck, endDistanceFromHeadToNeck);
+                var neckMin = radius * 0.55;
+                var neckMax = radius * 1.5;
+                if (minimumDistanceFromHeadToNeck < neckMin || minimumDistanceFromHeadToNeck > neckMax) {
+                    console.log('Stroke is not body because neck is out of range');
+                    return false;
+                }
+                return true;
+            }
+
+            function isExtremityValid(head, body, points) {
+                var headPoint = [head.centroid.x, head.centroid.y];
+                var bellyPoint = body.points[(body.points.length / 2) | 0];
+                var startDistanceFromHeadToNeck = distanceBetweenPoints(headPoint, body.points[0]);
+                var endDistanceFromHeadToNeck = distanceBetweenPoints(headPoint, body.points[body.points.length - 1]);
+                var minimumDistanceFromHeadToNeck = Math.min(startDistanceFromHeadToNeck, endDistanceFromHeadToNeck);
+                
+                var startPoint;
+                var endPoint;
+                if (startDistanceFromHeadToNeck < endDistanceFromHeadToNeck) {
+                    startPoint = body.points[0];
+                    endPoint = body.points[body.points.length - 1];
+                } else {
+                    endPoint = body.points[0];
+                    startPoint = body.points[body.points.length - 1];
+                }
+                var neckPoint = midpointBetweenPoints(bellyPoint, startPoint);
+                var abdomenPoint = midpointBetweenPoints(bellyPoint, endPoint);
+                var extPointA = points[0];
+                var extPointB = points[points.length-1];
+                var maximumDistanceFromExtremeToAb = 2*head.radius;
+                var extremity = determineExtremity(maximumDistanceFromExtremeToAb,neckPoint,abdomenPoint,extPointA,extPointB);
+                if(extremity ==-1){
+                    return null;
+                } else if(extremity==0){
+                    if(stickFigure.arm.left && stickFigure.arm.right) {
+                        return null;
+                    } else {
+                        return {name: 'arm', points: points};
+                        //izquierdo o derecho
+                    }
+                } else if(extremity==1){
+                    if(stickFigure.leg.left && stickFigure.leg.right) {
+                        return null;
+                    } else {
+                        return {name: 'leg', points: points};
+                        //izquierdo o derecho
+                    }
+                }
+                return null;
+            }
+            function determineExtremity(maximumDistance,neckPoint,abdomenPoint,extPointA,extPointB){
+                //arm=0; leg=1;
+                var distNeckToA = distanceBetweenPoints(extPointA,neckPoint);
+                var distAbToB = distanceBetweenPoints(extPointB,abdomenPoint);
+                var distNeckToB = distanceBetweenPoints(extPointB,neckPoint);
+                var distAbToA = distanceBetweenPoints(extPointA,abdomenPoint);
+                if(distNeckToA<maximumDistance){
+                    if(distAbToB<maximumDistance){
+                        if (distNeckToA<distAbToB){
+                            return 0;
+                        } else {
+                            return 1;
+                        }
+                    } else {
+                        return 0;
+                    }
+                }
+                if(distNeckToB<maximumDistance){
+                    if(distAbToA<maximumDistance){
+                        if (distNeckToB<distAbToA){
+                            return 0;
+                        } else {
+                            return 1;
+                        }
+                    } else {
+                        return 0;
+                    }
+                }
+                if(distAbToA<maximumDistance){
+                    if(distNeckToB<maximumDistance){
+                        if (distAbToA<distNeckToB){
+                            return 1;
+                        } else {
+                            return 0;
+                        }
+                    } else {
+                        return 1;
+                    }
+                }
+                if(distAbToB<maximumDistance){
+                    if(distNeckToA<maximumDistance){
+                        if (distAbToB<distNeckToA){
+                            return 1;
+                        } else {
+                            return 0;
+                        }
+                    } else {
+                        return 1;
+                    }
+                }
+                return -1;
+            }
+            function distanceBetweenPoints(pA, pB) {
+                var x1 = pA[0],
+                y1 = pA[1],
+                x2 = pB[0],
+                y2 = pB[1];
+                return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+            }
+            function midpointBetweenPoints(pA, pB) {
+                var x1 = pA[0],
+                y1 = pA[1],
+                x2 = pB[0],
+                y2 = pB[1];
+                return [x2 + (x1 - x2) / 2, y2 + (y1 - y2) / 2]
+            }
+            function clearScene(){
+                var obj, i;
+                if(scene.children.length==0) return;
+                var numberOfChilren = scene.children.length;
+                for (i=0;i<numberOfChilren;i++) {
+                    obj = scene.children[0];                    
+                    scene.remove(obj);                    
+                }
+                stickFigure =  {arm: {}, leg: {}};
+            }
     	</script>
-    	<div>
+    	<input type="button" onclick="clearScene()" value="Clear" />
+        <div>
     		<canvas id="myCanvas" width="100%" height="100%">
     	</div>
+
     </body>
 </html>
