@@ -7,6 +7,7 @@
         <script src="js/three.js"></script>
         <script src="js/regression.js"></script>
         <script src="js/Detector.js"></script>
+        <link rel="stylesheet" href="css/StyleSheet.css"/>
     </head>
     <body>
     	<script>
@@ -19,6 +20,8 @@
             var buffer = []; //Guarda las lineas que se dibujan y luego es vaciado
             var puntos = []; //Guarda los puntos dibujados en cada trazo
             var stickFigure =  {arm: {}, leg: {}};
+
+
 
             function get3dPointZAxis(event)
             {
@@ -33,8 +36,93 @@
                 return pos;
             }
 
-            init();
-			animate();
+            createPopup();
+
+            function createPopup(){
+                var popup, popupBody, bodySection, title, subtitle, members, inst;
+
+                popup = document.createElement("div");
+                popup.setAttribute("class", "pop");
+
+                popupBody = document.createElement("div");
+                popupBody.setAttribute("class","popBody");
+
+                title = document.createElement("h1");
+                title.innerHTML = "Proyecto 2 - Gráficos por Computador II";
+                popupBody.appendChild(title);
+
+                subtitle = document.createElement("h2");
+                subtitle.innerHTML = "Stick Figures";
+                popupBody.appendChild(subtitle);
+
+                members = document.createElement("p");
+                var t = document.createTextNode("Joseph Gallardo / Charlie Medina / Alvaro Ortiz")
+                members.appendChild(t);
+                popupBody.appendChild(members);
+
+                inst = document.createElement("h2");
+                inst.innerHTML = "Indicaciones";
+                popupBody.appendChild(inst);
+                
+                var cabeza = document.createElement("div");
+                cabeza.setAttribute("class","cabeza");
+                cabeza.innerHTML = "Cabeza - Color rojo";
+                popupBody.appendChild(cabeza);
+
+                var tronco = document.createElement("div");
+                tronco.setAttribute("class","tronco");
+                tronco.innerHTML = "Tronco - Color azul";
+                popupBody.appendChild(tronco);
+
+                var mIzq = document.createElement("div");
+                mIzq.setAttribute("class","mIzq");
+                mIzq.innerHTML = "Mano Izquierda - Color amarillo";
+                popupBody.appendChild(mIzq);
+
+                var mDer = document.createElement("div");
+                mDer.setAttribute("class","mDer");
+                mDer.innerHTML = "Mano Derecha - Color verde";
+                popupBody.appendChild(mDer);
+
+                var pIzq = document.createElement("div");
+                pIzq.setAttribute("class","pIzq");
+                pIzq.innerHTML = "Pierna Izquierda - Color morado";
+                popupBody.appendChild(pIzq);
+
+                var pDer = document.createElement("div");
+                pDer.setAttribute("class","pDer");
+                pDer.innerHTML = "Pierna Derecha - Color naranja";
+                popupBody.appendChild(pDer);
+
+                var btnStart = document.createElement("input");
+                btnStart.setAttribute("id","btnStart");
+                btnStart.setAttribute("type","submit");
+                btnStart.setAttribute("value","Empezar");
+                btnStart.addEventListener("click",empezarClicked,false);
+                popupBody.appendChild(btnStart);
+
+        
+                popup.appendChild(popupBody);
+
+                bodySection = document.body;
+                bodySection.appendChild(popup);
+            }
+
+            function empezarClicked(){
+                cerrarPopup();
+                init();
+                animate();                
+                var btnClear = document.createElement("input");
+                btnClear.setAttribute("type", "button");
+                btnClear.setAttribute("value","Limpiar");
+                btnClear.addEventListener("click",clearScene,false);
+                document.body.appendChild(btnClear);
+            }
+
+            function cerrarPopup(){
+                var popup = document.getElementsByClassName("pop")[0];
+                document.body.removeChild(popup);
+            }
 
 			function init() {
 
@@ -56,7 +144,7 @@
                     renderer = new THREE.CanvasRenderer();
                     
 				renderer.setClearColor( 0xf0f0f0 );
-				renderer.setSize( window.innerWidth, window.innerHeight );
+				renderer.setSize( window.innerWidth, window.innerHeight);
 
 				container.appendChild( renderer.domElement );
 
@@ -463,10 +551,5 @@
                 stickFigure =  {arm: {}, leg: {}};
             }
     	</script>
-    	<input type="button" onclick="clearScene()" value="Clear" />
-        <div>
-    		<canvas id="myCanvas" width="100%" height="100%">
-    	</div>
-
     </body>
 </html>
